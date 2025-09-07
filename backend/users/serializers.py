@@ -6,7 +6,7 @@ Defines serializers for the custom User model, including:
 """
 
 from rest_framework import serializers
-from django.contrib.auth.password_validation import validate_password
+from django.contrib.auth.password_validation import validate_password # type: ignore
 from .models import User
 
 
@@ -23,11 +23,14 @@ class UserSerializer(serializers.ModelSerializer):
 
         model = User
         fields = [
+            "id",
             "first_name",
             "last_name",
             "email",
             "username",
             "password",
+            "image",
+            "followers",
         ]
         extra_kwargs = {
             "first_name": {"required": True},

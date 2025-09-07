@@ -1,9 +1,11 @@
-import React from 'react'
+import { Navigate } from "react-router";
+import { clearLocalStorageExcept } from "../../utils/localStorage";
 
 const Logout = () => {
+  clearLocalStorageExcept([]);
   return (
-    <div>Logout</div>
-  )
-}
+    <Navigate to="/users/login" state={{ message: "Logout successful" }} />
+  );
+};
 
-export default Logout
+export default Logout;

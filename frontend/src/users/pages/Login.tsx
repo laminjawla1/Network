@@ -1,6 +1,41 @@
-import { Link } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
+import api from "../../api";
+import { ACCESS_TOKEN, REFRESH_TOKEN } from "../../constants";
+import React, { useEffect, useState } from "react";
+import { toast } from "react-toastify";
 
 const Login = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [username, setUsername] = useState<string>("");
+  const [password, setPassword] = useState<string>("");
+
+  useEffect(() => {
+    if (location.state?.message) {
+      toast.success(location.state.message);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleLoginFormSubmission = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    api
+      .post("/users/token/", { username, password })
+      .then((response) => {
+        localStorage.setItem(ACCESS_TOKEN, response.data.access);
+        localStorage.setItem(REFRESH_TOKEN, response.data.refresh);
+        navigate("/", {
+          state: { message: "Login successful!" },
+        });
+      })
+      .catch((error) => {
+        if (error?.response?.status === 401) {
+          const data = error.response.data;
+          toast.error(data.detail);
+        }
+      });
+  };
+
   return (
     <div className="min-h-screen flex flex-col md:flex-row items-center justify-center bg-gray-50 p-4">
       {/* Left side */}
@@ -16,16 +51,23 @@ const Login = () => {
       </div>
 
       {/* Right side */}
-      <form className="bg-white shadow-lg rounded-2xl p-6 w-full max-w-sm">
+      <form
+        className="bg-white shadow-lg rounded-2xl p-6 w-full max-w-sm"
+        onSubmit={handleLoginFormSubmission}
+      >
         <input
           type="text"
           placeholder="Username"
           className="w-full mb-4 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
         />
         <input
           type="password"
           placeholder="Password"
           className="w-full mb-4 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
         />
         <button
           type="submit"

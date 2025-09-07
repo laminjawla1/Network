@@ -13,6 +13,10 @@ from rest_framework.status import (
     HTTP_200_OK,
 )
 from django.contrib.auth import update_session_auth_hash # type: ignore
+from django.shortcuts import get_object_or_404 # type: ignore
+from posts.serializers import PostSerializer
+from posts.models import Post
+from notifications.models import Notification
 from .models import User
 from .serializers import UserSerializer, ChangePasswordSerializer
 
@@ -32,16 +36,6 @@ def get_current_user(request):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def change_password(request):
-    """
-    Allow authenticated users to change their password securely.
-
-    Validates old password, checks new password and confirmation,
-    and updates the password while keeping the user logged in.
-
-    Returns:
-        HTTP 200 OK with success message on valid password change.
-        HTTP 400 BAD REQUEST with error details on failure.
-    """
     serializer = ChangePasswordSerializer(
         data=request.data, context={"request": request}
     )
@@ -56,6 +50,15 @@ def change_password(request):
         # Update session hash to prevent logout after password change
         update_session_auth_hash(request, user)
 
+        # Notify the user about password change
+        Notification.objects.create(
+            sender=user,
+            recipient=user,
+            type="system",
+            message="Your password has changed",
+            content_object=user
+        )
+
         return Response(
             {"detail": "Password updated successfully."}, status=HTTP_200_OK
         )
@@ -65,15 +68,6 @@ def change_password(request):
 
 @api_view(["POST"])
 def register(request):
-    """
-    Register a new user with the provided data.
-
-    Validates user data, creates the user, and returns serialized user info.
-
-    Returns:
-        HTTP 201 CREATED with user data on success.
-        HTTP 400 BAD REQUEST on validation failure.
-    """
     serializer = UserSerializer(data=request.data)
     if serializer.is_valid(raise_exception=True):
         user = User.objects.create_user(**serializer.validated_data)
@@ -82,8 +76,91 @@ def register(request):
 
 
 class CreateUser(generics.CreateAPIView):
-    """Create user api view"""
-
     queryset = User.objects.all()
     permission_classes = [AllowAny]
     serializer_class = UserSerializer
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def follow_or_unfollow(request, pk):
+    user = get_object_or_404(User, pk=pk)
+
+    # Prevent self-following
+    if request.user == user:
+        return Response(
+            {"detail": "You cannot follow yourself."},
+            status=HTTP_400_BAD_REQUEST
+        )
+
+    if request.user in user.followers.all():
+        # Unfollow
+        user.followers.remove(request.user)
+        action = "unfollowed"
+    else:
+        # Follow
+        user.followers.add(request.user)
+        action = "followed"
+
+        # Notify only when followed
+        sender_name = f"{request.user.first_name} {request.user.last_name}".strip()
+        if not sender_name:
+            sender_name = request.user.username
+
+        Notification.objects.create(
+            sender=request.user,
+            recipient=user,
+            type="follow",
+            message=f"{sender_name} followed you.",
+            content_object=request.user
+        )
+
+    return Response(
+        {"detail": f"Successfully {action} {user.username}."},
+        status=HTTP_200_OK
+    )
+
+
+
+class ListUser(generics.ListAPIView):
+    serializer_class = UserSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return User.objects.exclude(pk=self.request.user.pk)
+
+class ListFollowers(generics.ListAPIView):
+    serializer_class = UserSerializer
+    permission_classes = [IsAuthenticated]
+
+    def list(self, request, *args, **kwargs):
+        user = User.objects.get(pk=kwargs.get("pk"))
+        serializer = self.get_serializer(user.followers.all(), many=True)
+        return Response(serializer.data)
+
+class ListFollowing(generics.ListAPIView):
+    serializer_class = UserSerializer
+    permission_classes = [IsAuthenticated]
+
+    def list(self, request, *args, **kwargs):
+        user = User.objects.get(pk=kwargs.get("pk"))
+        serializer = self.get_serializer(user.following_users.all(), many=True)
+        return Response(serializer.data)
+
+class ListUserPosts(generics.ListAPIView):
+    serializer_class = PostSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Post.objects.filter(user__pk=self.kwargs.get("pk"))
+
+class GetUser(generics.RetrieveAPIView):
+    queryset = User.objects.all()
+    permission_classes = [IsAuthenticated]
+    serializer_class = UserSerializer
+    lookup_field = "username"
+
+class UserDetailUpdate(generics.UpdateAPIView):
+    queryset = User.objects.all()
+    serializer_class = UserSerializer
+    permission_classes = [IsAuthenticated]

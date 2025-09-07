@@ -3,6 +3,9 @@ from django.contrib.auth.models import AbstractUser # type: ignore
 
 
 class User(AbstractUser):
+    image = models.ImageField(
+        default="profile_pics/default.png", upload_to="profile_pics"
+    )
     followers = models.ManyToManyField(
         "self",
         symmetrical=False,
